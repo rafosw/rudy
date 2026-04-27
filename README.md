@@ -195,19 +195,3 @@ Instead of `curl`, open the target URL in a browser while the attack is running.
 Check `Server:`, `X-Powered-By:`, and `X-AspNet-Version:` headers on the target. Apache with default `MaxRequestWorkers 150` is far more vulnerable than Nginx with `worker_connections 1024`. Adjust `-c` accordingly — aim for at least 110% of the declared worker count.
 
 ---
-
-
-## Architecture Notes
-
-- Pure Python, no dependencies.
-- One OS thread per concurrent connection.
-- ANSI in-place dashboard updates without scrolling.
-- Automatic reconnection with exponential backoff on failure.
-- TCP keepalive enabled per socket to prevent OS-level idle disconnect.
-- Adaptive interval adjustment based on observed HTTP response codes.
-
----
-
-## Author
-
-**rafosw** — https://github.com/rafosw/rudy
