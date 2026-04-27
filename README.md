@@ -24,6 +24,10 @@ The attack is inherently stealthy. Because no request ever completes, standard a
 
 ---
 
+## Screenshots
+
+<img src="https://github.com/rafosw/APKdevastate/blob/master/ss/Screenshot_2.png" width="600" height="350" />
+
 ## Installation
 
 No external dependencies are required. The tool uses Python standard library only.
