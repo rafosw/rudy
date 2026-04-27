@@ -8,9 +8,9 @@ Authorized penetration testing and security research only.
 RUDY exploits the way HTTP/1.1 servers allocate a dedicated worker thread (or process) per incoming connection. The attack proceeds as follows:
 
 1. A TCP connection is established to the target.
-2. A valid HTTP POST request is sent with a large `Content-Length` declared.
-3. The request body is dripped at one byte per interval (default: 10 seconds), keeping the server thread occupied indefinitely.
-4. Repeating this across many concurrent connections exhausts the server thread pool, causing legitimate requests to queue and eventually time out.
+2. A valid HTTP POST request is sent with a large `Content-Length` (the declared payload size).
+3. The request body is then dripped extremely slowly (default: 1 byte every 10 seconds).
+4. The server keeps the connection open while waiting for the full body, tying up a worker thread indefinitely.
 
 The attack is inherently stealthy. Because no request ever completes, standard access logs record nothing until a server-side timeout fires.
 
@@ -53,7 +53,7 @@ python3 rudy.py [options]
 | `-u URL` | Target URL | — |
 | `--url-file FILE` | File containing target URLs, one per line | — |
 | `-c N` | Number of concurrent connections | 1 |
-| `-p SIZE` | Declared payload size (e.g. `1MB`, `500KB`) | 1MB |
+| `-p SIZE` | Declared Content-Length / body size (e.g. `1MB`, `500KB`) | 1MB |
 | `-i SECONDS` | Interval between each dripped byte | 10 |
 | `-j SECONDS` | Timing jitter applied per interval | 1.0 |
 
@@ -154,7 +154,7 @@ python3 rudy.py -u "http://target.com/" -c 50 --log events.json --report summary
 
 ---
 
-## Tricks
+## Tips
 
 **Identify the right endpoint before attacking.**  
 The most vulnerable endpoints are those that read the entire request body before responding — file upload forms, login handlers, search endpoints, and API routes that process JSON. Static pages served directly by a CDN or a reverse proxy cache are immune. Use Burp Suite or browser devtools to identify POST endpoints that have noticeable server-side processing delay.
@@ -171,8 +171,8 @@ python3 rudy.py -u "https://target.com/api/submit" \
   -c 50 -p 2MB -i 8
 ```
 
-**Declare a payload size larger than the server's body size limit.**  
-If the target has a maximum body size (e.g. Nginx `client_max_body_size 10m`), declare `-p 12MB`. The server will accept the connection and wait for data up to its limit, giving you more time per thread before it closes the connection.
+**Monitor connection closures related to maximum body sizes.**  
+If the target enforces a maximum body size, the server may still close the connection after a certain amount of data has been received. Monitor the connection lifetime and combine with `--adaptive` to react to early closures and maintain thread exhaustion.
 
 **Combine with a real form payload using `-d`.**  
 Servers that validate form fields early (before reading the full body) will process your custom data and wait for the remainder. This keeps the thread alive while also triggering application-level logic, increasing resource consumption beyond just the network layer.
