@@ -1,4 +1,4 @@
-# RUDY — R-U-Dead-Yet?
+# RUDY - R-U-Dead-Yet?
 
 Advanced Low-and-Slow HTTP POST denial-of-service research tool.  
 Authorized penetration testing and security research only.
