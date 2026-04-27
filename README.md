@@ -26,7 +26,13 @@ The attack is inherently stealthy. Because no request ever completes, standard a
 
 ## Screenshots
 
-<img src="https://github.com/rafosw/APKdevastate/blob/master/ss/Screenshot_2.png" width="600" height="350" />
+Example
+
+<img src="https://github.com/rafosw/rudy/blob/main/ss/Screenshot_1.png?raw=true" width="600" height="350" />
+
+Example in Burp Suite proxy
+
+<img src="https://github.com/rafosw/rudy/blob/main/ss/Screenshot_2.png?raw=true" width="600" height="350" />
 
 ## Installation
 
