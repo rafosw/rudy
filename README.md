@@ -3,14 +3,6 @@
 Advanced Low-and-Slow HTTP POST denial-of-service research tool.  
 Authorized penetration testing and security research only.
 
----
-
-## Legal Notice
-
-This tool is intended exclusively for authorized security testing, academic research, and controlled lab environments. Running this tool against systems without explicit written permission from the owner is illegal under computer fraud and abuse laws in most jurisdictions. The author assumes no liability for misuse.
-
----
-
 ## How It Works
 
 RUDY exploits the way HTTP/1.1 servers allocate a dedicated worker thread (or process) per incoming connection. The attack proceeds as follows:
@@ -203,5 +195,11 @@ Instead of `curl`, open the target URL in a browser while the attack is running.
 
 **Read server response headers before attacking.**  
 Check `Server:`, `X-Powered-By:`, and `X-AspNet-Version:` headers on the target. Apache with default `MaxRequestWorkers 150` is far more vulnerable than Nginx with `worker_connections 1024`. Adjust `-c` accordingly — aim for at least 110% of the declared worker count.
+
+---
+
+## Legal Notice
+
+This tool is intended exclusively for authorized security testing, academic research, and controlled lab environments. Running this tool against systems without explicit written permission from the owner is illegal under computer fraud and abuse laws in most jurisdictions. The author assumes no liability for misuse.
 
 ---
